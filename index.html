@@ -1,31 +1,63 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <html>
-<head>
+  <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 Viewer</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+    <title>360 이미지 투어</title>
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <style>
-        #panorama {
-            width: 100%;
-            height: 100vh; /* 전체 화면 높이 사용 */
-        }
-        body { margin: 0; }
+      /* 버튼 스타일 */
+      .button-container {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 999; /* A-Frame 화면 위에 버튼이 오도록 설정 */
+        display: flex;
+        gap: 10px;
+      }
+      
+      .tour-button {
+        padding: 10px 20px;
+        font-size: 16px;
+        border: none;
+        border-radius: 5px;
+        background-color: rgba(0, 0, 0, 0.7);
+        color: white;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+
+      .tour-button:hover {
+        background-color: rgba(0, 0, 0, 0.9);
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
+    <a-scene vr-mode-ui="enabled: false"> <a-assets>
+        <img id="home-img" src="image_1.png">    <img id="factory-img" src="image_2.png"> </a-assets>
 
-<div id="panorama"></div>
+      <a-sky id="background-sky" src="#home-img" rotation="0 -90 0"></a-sky>
+      
+      <a-entity camera look-controls>
+         <a-cursor color="yellow" scale="0.5 0.5 0.5"></a-cursor>
+      </a-entity>
 
-<script>
-pannellum.viewer('panorama', {
-    "type": "equirectangular",
-    "panorama": "./360_1.png", /* 이미지 파일명 정확히 입력 */
-    "autoLoad": true, /* 자동 로딩 */
-    "autoRotate": -2 /* 천천히 자동 회전 (선택사항) */
-});
-</script>
+    </a-scene>
+    <div class="button-container">
+      <button class="tour-button" onclick="changeScene('home')">🏠 가정집으로</button>
+      <button class="tour-button" onclick="changeScene('factory')">🏭 공장으로</button>
+    </div>
 
-</body>
+    <script>
+      // 이미지를 변경하는 함수
+      function changeScene(location) {
+        const sky = document.querySelector('#background-sky');
+        if (location === 'home') {
+          sky.setAttribute('src', '#home-img');
+        } else if (location === 'factory') {
+          sky.setAttribute('src', '#factory-img');
+        }
+      }
+    </script>
+  </body>
 </html>
