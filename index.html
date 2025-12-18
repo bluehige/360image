@@ -2,10 +2,33 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>360 이미지 갤러리 (Canvas Optimization)</title>
-  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <title>360 이미지 갤러리 (Marzipano Edition)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  
+  <script src="https://cdn.jsdelivr.net/npm/marzipano@0.10.2/dist/marzipano.js"></script>
+  
   <style>
-    /* 썸네일 컨테이너 */
+    /* 전체 화면 리셋 */
+    body, html {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden; /* 스크롤 방지 */
+      background-color: #000;
+    }
+
+    /* 360 뷰어가 들어갈 공간 */
+    #pano {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* 썸네일 컨테이너 (기존 디자인 유지) */
     .thumbnail-container {
       position: absolute;
       bottom: 0;
@@ -35,7 +58,6 @@
     }
     
     .thumb-item.loaded { display: inline-block; }
-
     .thumb-item:hover { opacity: 1; transform: scale(1.05); }
     .thumb-item.active { opacity: 1; }
     .thumb-item.active img { border: 3px solid #FFD700; }
@@ -54,36 +76,44 @@
       font-size: 12px;
       margin-top: 5px;
       text-shadow: 1px 1px 2px black;
+      font-family: sans-serif;
     }
   </style>
 </head>
 <body>
 
-  <canvas id="sky-buffer" width="4096" height="2048" style="display: none;"></canvas>
-
-  <a-scene vr-mode-ui="enabled: false" loading-screen="dotsColor: white; backgroundColor: black">
-    <a-entity light="type: ambient; color: #FFF; intensity: 1.5"></a-entity>
-    
-    <a-sky id="background-sky" src="#sky-buffer" rotation="0 -90 0"></a-sky>
-    
-    <a-entity camera look-controls>
-      <a-cursor color="yellow" scale="0.5 0.5 0.5" raycaster="objects: none"></a-cursor>
-    </a-entity>
-  </a-scene>
+  <div id="pano"></div>
 
   <div class="thumbnail-container" id="thumb-scroll-container"></div>
 
   <script>
+    // 1. Marzipano 뷰어 설정
+    var panoElement = document.getElementById('pano');
+    var viewerOpts = {
+      controls: {
+        mouseViewMode: 'drag'    // 마우스/터치 드래그로 회전
+      }
+    };
+    
+    // 뷰어 생성
+    var viewer = new Marzipano.Viewer(panoElement, viewerOpts);
+
+    // 공통 설정 (시야각 등)
+    var limiter = Marzipano.RectilinearView.limit.traditional(4096, 100*Math.PI/180);
+    var viewOpts = {
+      yaw: 0,
+      pitch: 0,
+      fov: Math.PI / 2, // 기본 줌 상태
+      limits: limiter
+    };
+
+    // ---------------------------------------------------------
+    
     const totalImagesToCheck = 50; 
     const container = document.getElementById('thumb-scroll-container');
-    const sky = document.getElementById('background-sky');
-    
-    // 캔버스 시스템 가져오기
-    const bufferCanvas = document.getElementById('sky-buffer');
-    const ctx = bufferCanvas.getContext('2d');
-    
     let firstLoaded = false; 
 
+    // 순서대로 로딩 시작
     for (let i = 1; i <= totalImagesToCheck; i++) {
       createSlotAndLoad(i);
     }
@@ -98,15 +128,14 @@
       const pngName = baseName + ".png";
       const jpgName = baseName + ".jpg";
 
+      // 실제 이미지 존재 여부 확인용
       const img = new Image();
-      // CORS 문제 방지 (캔버스 사용 시 필수)
-      img.crossOrigin = "Anonymous"; 
-      
       let currentSrc = pngName; 
       img.src = currentSrc;
 
       img.onload = function() {
-        finalizeSlot(wrapper, img, labelText = baseName);
+        // 이미지가 로드되면 Marzipano 씬(Scene)을 생성합니다.
+        createMarzipanoScene(wrapper, img, currentSrc, baseName);
       };
 
       img.onerror = function() {
@@ -119,46 +148,47 @@
       };
     }
 
-    function finalizeSlot(wrapper, imgElement, labelText) {
+    function createMarzipanoScene(wrapper, imgElement, realFileName, labelText) {
+      // 1. 썸네일 표시
       const span = document.createElement('span');
       span.textContent = labelText;
-
-      // 썸네일용 이미지는 복사본을 만들어 작게 표시 (메모리 절약)
-      const thumbImg = imgElement.cloneNode(); 
+      
+      const thumbImg = imgElement.cloneNode();
       wrapper.appendChild(thumbImg);
       wrapper.appendChild(span);
       wrapper.classList.add('loaded');
 
-      wrapper.addEventListener('click', function() {
-        // [핵심 기술] 이미지를 바로 넣지 않고, 캔버스에 '그려서' 넣습니다.
-        renderToSky(imgElement);
+      // 2. Marzipano 소스 생성
+      // A-Frame과 달리 Marzipano는 이미지 크기를 자동으로 감지하여 최적화합니다.
+      var source = Marzipano.ImageUrlSource.fromString(realFileName);
+      
+      // 기하학적 구조 설정 (360 이미지 = Equirectangular)
+      var geometry = new Marzipano.EquirectGeometry([{ width: 4096 }]);
 
+      // 뷰(카메라) 설정
+      var view = new Marzipano.RectilinearView(viewOpts, limiter);
+
+      // 씬 생성 및 저장
+      var scene = viewer.createScene({
+        source: source,
+        geometry: geometry,
+        view: view,
+        pinFirstLevel: true
+      });
+
+      // 3. 클릭 이벤트 (씬 전환)
+      wrapper.addEventListener('click', function() {
+        scene.switchTo(); // 이 씬으로 부드럽게 전환
+        
         document.querySelectorAll('.thumb-item').forEach(item => item.classList.remove('active'));
         wrapper.classList.add('active');
       });
 
+      // 4. 첫 번째 이미지 자동 실행
       if (!firstLoaded) {
         firstLoaded = true;
-        // 첫 번째 이미지 로딩 시 즉시 캔버스에 그리기
-        // 이미지가 로드된 상태이므로 setTimeout 없이 바로 그려도 됩니다.
-        renderToSky(imgElement);
+        scene.switchTo();
         wrapper.classList.add('active');
-      }
-    }
-
-    // [최적화 함수] 어떤 비율의 이미지든 4096x2048 캔버스에 맞춰서 그려버림
-    function renderToSky(sourceImg) {
-      // 1. 캔버스를 깨끗이 지웁니다.
-      ctx.clearRect(0, 0, bufferCanvas.width, bufferCanvas.height);
-      
-      // 2. 이미지를 캔버스 크기(4096x2048)에 강제로 맞춰서 그립니다.
-      // 이렇게 하면 16:9 이미지도 2:1로 변환되어 WebGL이 좋아합니다.
-      ctx.drawImage(sourceImg, 0, 0, bufferCanvas.width, bufferCanvas.height);
-      
-      // 3. A-Frame에게 "텍스처가 바뀌었으니 업데이트해!"라고 알립니다.
-      const mesh = sky.getObject3D('mesh');
-      if (mesh && mesh.material && mesh.material.map) {
-        mesh.material.map.needsUpdate = true;
       }
     }
   </script>
