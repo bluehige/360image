@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>360 이미지 갤러리 (Smart Loader)</title>
+  <title>360 이미지 갤러리 (Final)</title>
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <style>
     /* 썸네일 컨테이너 */
@@ -26,7 +26,7 @@
       text-align: center;
       cursor: pointer;
       flex-shrink: 0;
-      opacity: 0.6; /* 기본은 약간 투명하게 */
+      opacity: 0.6;
       transition: 0.2s;
     }
     .thumb-item:hover { opacity: 1; transform: scale(1.05); }
@@ -38,6 +38,7 @@
       height: 80px;
       object-fit: cover;
       border-radius: 5px;
+      background-color: #333; /* 이미지 로딩 전 배경색 */
     }
     .thumb-item span {
       display: block;
@@ -46,10 +47,10 @@
       margin-top: 5px;
     }
 
-    /* 디버그 로그 창 (테스트용) */
+    /* 디버그 로그 창 */
     #debug-console {
       position: absolute;
-      top: 10px;
+      top: 50px;
       left: 10px;
       width: 300px;
       height: 200px;
@@ -59,17 +60,36 @@
       padding: 10px;
       overflow-y: auto;
       z-index: 9999;
-      pointer-events: none; /* 클릭 통과 */
-      display: none; /* 평소엔 숨김, 필요하면 block으로 변경 */
+      pointer-events: none;
+      display: none; /* 기본적으로 숨김 */
+    }
+
+    /* 로그 토글 버튼 */
+    #toggle-debug-btn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10000;
+      padding: 5px 10px;
+      background: #333;
+      color: white;
+      border: 1px solid #555;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
   
-  <div id="debug-console" style="display: block;">=== 시스템 로그 ===<br></div>
+  <button id="toggle-debug-btn" onclick="toggleDebug()">🐞 디버그 로그 켜기/끄기</button>
+  
+  <div id="debug-console">=== 시스템 로그 ===<br></div>
 
   <a-scene vr-mode-ui="enabled: false" loading-screen="dotsColor: white; backgroundColor: black">
-    <a-sky id="background-sky" src="" rotation="0 -90 0" color="#111"></a-sky>
+    
+    <a-entity light="type: ambient; color: #FFF; intensity: 1.5"></a-entity>
+
+    <a-sky id="background-sky" src="" rotation="0 -90 0"></a-sky>
+    
     <a-entity camera look-controls>
       <a-cursor color="yellow" scale="0.5 0.5 0.5" raycaster="objects: none"></a-cursor>
     </a-entity>
@@ -78,34 +98,45 @@
   <div class="thumbnail-container" id="thumb-scroll-container"></div>
 
   <script>
-    const totalImagesToCheck = 50; // 체크할 이미지 개수
+    const totalImagesToCheck = 50; 
     const container = document.getElementById('thumb-scroll-container');
     const sky = document.getElementById('background-sky');
     const debugBox = document.getElementById('debug-console');
 
-    // 로그 출력 함수
-    function log(msg) {
-      debugBox.innerHTML += msg + "<br>";
-      debugBox.scrollTop = debugBox.scrollHeight;
+    // 디버그 창 켜고 끄는 함수
+    function toggleDebug() {
+      if (debugBox.style.display === 'none') {
+        debugBox.style.display = 'block';
+      } else {
+        debugBox.style.display = 'none';
+      }
     }
 
-    // 이미지를 하나씩 체크하고 생성하는 함수
+    // 안전한 로그 기록 함수 (에러 방지)
+    function log(msg) {
+      if (debugBox) {
+        debugBox.innerHTML += msg + "<br>";
+        debugBox.scrollTop = debugBox.scrollHeight;
+      }
+      console.log(msg); // 브라우저 콘솔에도 기록
+    }
+
+    // 이미지 로더
     function createThumbnail(index) {
       const baseName = "image_" + index;
       
-      // 1. 썸네일용 이미지 객체 생성 (화면엔 아직 안 붙임)
       const img = new Image();
       const thumbWrapper = document.createElement('div');
       thumbWrapper.className = 'thumb-item';
       thumbWrapper.id = 'thumb-' + index;
 
-      // [핵심 로직] PNG 먼저 시도 -> 실패하면 JPG 시도 -> 둘다 실패하면 포기
+      // 1. PNG 먼저 시도
       const tryPng = baseName + ".png";
-      const tryJpg = baseName + ".jpg"; // 대소문자 주의 (필요하면 .JPG 추가 로직 가능)
+      const tryJpg = baseName + ".jpg";
 
       img.src = tryPng;
 
-      // PNG 로드 성공 시
+      // PNG 성공 시
       img.onload = function() {
         log(`✅ [${baseName}] PNG 로드 성공`);
         finalizeThumbnail(thumbWrapper, img, tryPng, baseName, index);
@@ -113,46 +144,44 @@
 
       // PNG 실패 시 -> JPG 시도
       img.onerror = function() {
-        if (img.src.includes(".png")) {
-          log(`⚠️ [${baseName}] PNG 없음. JPG 시도 중...`);
-          img.src = tryJpg; // 소스 변경 후 재시도
-        } else {
-          // JPG까지 실패한 경우
-          log(`❌ [${baseName}] 파일 없음 (PNG/JPG 모두 실패)`);
-          // 썸네일을 아예 생성하지 않음 (컨테이너에 추가 안 함)
+        // 이미 JPG 시도 중이었다면 (src가 jpg로 끝난다면) -> 완전 실패
+        if (img.src.endsWith(".jpg")) {
+           // 조용히 종료 (로그만 남김)
+           console.log(`[${baseName}] 파일 없음`);
+           return;
         }
+        
+        // PNG 실패했으니 JPG로 바꿔서 재시도
+        log(`⚠️ [${baseName}] PNG 없음. JPG 찾는 중...`);
+        img.src = tryJpg;
       };
     }
 
-    // 썸네일 최종 생성 및 클릭 이벤트 연결
     function finalizeThumbnail(wrapper, imgElement, realFileName, labelText, index) {
-      // 텍스트 라벨
       const span = document.createElement('span');
       span.textContent = labelText;
 
       wrapper.appendChild(imgElement);
       wrapper.appendChild(span);
 
-      // 클릭 이벤트
       wrapper.addEventListener('click', function() {
         log(`🚀 배경 변경: ${realFileName}`);
         sky.setAttribute('src', realFileName);
         
-        // 하이라이트 변경
         document.querySelectorAll('.thumb-item').forEach(item => item.classList.remove('active'));
         wrapper.classList.add('active');
       });
 
-      // 컨테이너에 추가
       container.appendChild(wrapper);
 
-      // 만약 1번 이미지라면 자동으로 배경 설정
+      // 첫 번째 이미지는 자동으로 배경 설정
       if (index === 1) {
-        wrapper.click();
+        // 약간의 지연 후 실행 (안정성 확보)
+        setTimeout(() => wrapper.click(), 500);
       }
     }
 
-    // 반복 실행
+    // 실행 시작
     for (let i = 1; i <= totalImagesToCheck; i++) {
       createThumbnail(i);
     }
