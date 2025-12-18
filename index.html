@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>360 이미지 갤러리 (Mobile Touch Fixed)</title>
+  <title>360 이미지 갤러리 (Touch Fixed)</title>
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <style>
     /* 썸네일 컨테이너 */
@@ -35,7 +35,6 @@
     }
     
     .thumb-item.loaded { display: inline-block; }
-
     .thumb-item:hover { opacity: 1; transform: scale(1.05); }
     .thumb-item.active { opacity: 1; }
     .thumb-item.active img { border: 3px solid #FFD700; }
@@ -55,7 +54,101 @@
       margin-top: 5px;
       text-shadow: 1px 1px 2px black;
     }
+
+    /* 모바일에서 스크롤 방지 (드래그 시 화면 전체가 움직이는 것 방지) */
+    body {
+        overscroll-behavior: none;
+        touch-action: none; 
+    }
   </style>
+
+  <script>
+    AFRAME.registerComponent('drag-look-controls', {
+      schema: {
+        speed: { default: 0.002 } // 드래그 감도 조절
+      },
+      init: function () {
+        this.isDragging = false;
+        this.lastX = 0;
+        this.lastY = 0;
+        this.yaw = 0;
+        this.pitch = 0;
+        
+        // this 바인딩
+        this.onMouseDown = this.onMouseDown.bind(this);
+        this.onMouseMove = this.onMouseMove.bind(this);
+        this.onMouseUp = this.onMouseUp.bind(this);
+        this.onTouchStart = this.onTouchStart.bind(this);
+        this.onTouchMove = this.onTouchMove.bind(this);
+        this.onTouchEnd = this.onTouchEnd.bind(this);
+
+        // 이벤트 리스너 등록
+        window.addEventListener('mousedown', this.onMouseDown);
+        window.addEventListener('mousemove', this.onMouseMove);
+        window.addEventListener('mouseup', this.onMouseUp);
+        
+        // 모바일 터치 이벤트 (passive: false는 스크롤 막기 위해 필수)
+        window.addEventListener('touchstart', this.onTouchStart, { passive: false });
+        window.addEventListener('touchmove', this.onTouchMove, { passive: false });
+        window.addEventListener('touchend', this.onTouchEnd);
+      },
+
+      // --- 마우스 제어 ---
+      onMouseDown: function (evt) {
+        this.isDragging = true;
+        this.lastX = evt.clientX;
+        this.lastY = evt.clientY;
+      },
+      onMouseMove: function (evt) {
+        if (!this.isDragging) return;
+        this.rotateCamera(evt.clientX, evt.clientY);
+      },
+      onMouseUp: function () {
+        this.isDragging = false;
+      },
+
+      // --- 터치 제어 ---
+      onTouchStart: function (evt) {
+        if (evt.touches.length === 1) {
+          this.isDragging = true;
+          this.lastX = evt.touches[0].clientX;
+          this.lastY = evt.touches[0].clientY;
+        }
+      },
+      onTouchMove: function (evt) {
+        if (!this.isDragging) return;
+        // 브라우저 기본 스크롤 동작 방지
+        evt.preventDefault(); 
+        this.rotateCamera(evt.touches[0].clientX, evt.touches[0].clientY);
+      },
+      onTouchEnd: function () {
+        this.isDragging = false;
+      },
+
+      // --- 공통 회전 로직 ---
+      rotateCamera: function (clientX, clientY) {
+        const deltaX = clientX - this.lastX;
+        const deltaY = clientY - this.lastY;
+
+        this.lastX = clientX;
+        this.lastY = clientY;
+
+        // 좌우 회전 (Y축 회전)
+        this.yaw -= deltaX * this.schema.speed;
+        
+        // 상하 회전 (X축 회전)
+        this.pitch -= deltaY * this.schema.speed;
+
+        // 상하 회전 각도 제한 (하늘/땅 뚫림 방지: -90도 ~ 90도)
+        const PI_2 = Math.PI / 2;
+        this.pitch = Math.max(-PI_2, Math.min(PI_2, this.pitch));
+
+        // 카메라에 적용
+        this.el.object3D.rotation.y = this.yaw;
+        this.el.object3D.rotation.x = this.pitch;
+      }
+    });
+  </script>
 </head>
 <body>
 
@@ -66,7 +159,7 @@
     
     <a-sky id="background-sky" src="#sky-buffer" rotation="0 -90 0"></a-sky>
     
-    <a-entity camera look-controls="magicWindowTrackingEnabled: false; touchEnabled: true; mouseEnabled: true; reverseMouseDrag: false">
+    <a-entity camera drag-look-controls>
       <a-cursor color="yellow" scale="0.5 0.5 0.5" raycaster="objects: none"></a-cursor>
     </a-entity>
   </a-scene>
@@ -77,10 +170,8 @@
     const totalImagesToCheck = 50; 
     const container = document.getElementById('thumb-scroll-container');
     const sky = document.getElementById('background-sky');
-    
     const bufferCanvas = document.getElementById('sky-buffer');
     const ctx = bufferCanvas.getContext('2d');
-    
     let firstLoaded = false; 
 
     for (let i = 1; i <= totalImagesToCheck; i++) {
@@ -99,7 +190,6 @@
 
       const img = new Image();
       img.crossOrigin = "Anonymous"; 
-      
       let currentSrc = pngName; 
       img.src = currentSrc;
 
@@ -128,7 +218,6 @@
 
       wrapper.addEventListener('click', function() {
         renderToSky(imgElement);
-
         document.querySelectorAll('.thumb-item').forEach(item => item.classList.remove('active'));
         wrapper.classList.add('active');
       });
