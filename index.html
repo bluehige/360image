@@ -20,15 +20,31 @@
       padding: 10px;
       z-index: 999;
     }
+    
+    /* 스크롤바 스타일링 (크롬, 사파리 등) */
+    .thumbnail-container::-webkit-scrollbar {
+      height: 8px;
+    }
+    .thumbnail-container::-webkit-scrollbar-thumb {
+      background: #FFD700;
+      border-radius: 4px;
+    }
+
     .thumb-item {
-      display: inline-block;
+      display: none; /* 로딩 전에는 숨김 */
       margin-right: 15px;
       text-align: center;
       cursor: pointer;
       flex-shrink: 0;
       opacity: 0.6;
       transition: 0.2s;
+      position: relative;
     }
+    
+    .thumb-item.loaded {
+      display: inline-block; /* 로딩 완료 시 표시 */
+    }
+
     .thumb-item:hover { opacity: 1; transform: scale(1.05); }
     .thumb-item.active { opacity: 1; }
     .thumb-item.active img { border: 3px solid #FFD700; }
@@ -38,56 +54,23 @@
       height: 80px;
       object-fit: cover;
       border-radius: 5px;
-      background-color: #333; /* 이미지 로딩 전 배경색 */
+      background-color: #222;
     }
+    
     .thumb-item span {
       display: block;
       color: white;
       font-size: 12px;
       margin-top: 5px;
-    }
-
-    /* 디버그 로그 창 */
-    #debug-console {
-      position: absolute;
-      top: 50px;
-      left: 10px;
-      width: 300px;
-      height: 200px;
-      background: rgba(0, 0, 0, 0.8);
-      color: #00ff00;
-      font-size: 12px;
-      padding: 10px;
-      overflow-y: auto;
-      z-index: 9999;
-      pointer-events: none;
-      display: none; /* 기본적으로 숨김 */
-    }
-
-    /* 로그 토글 버튼 */
-    #toggle-debug-btn {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 10000;
-      padding: 5px 10px;
-      background: #333;
-      color: white;
-      border: 1px solid #555;
-      cursor: pointer;
+      text-shadow: 1px 1px 2px black;
     }
   </style>
 </head>
 <body>
-  
-  <button id="toggle-debug-btn" onclick="toggleDebug()">🐞 디버그 로그 켜기/끄기</button>
-  
-  <div id="debug-console">=== 시스템 로그 ===<br></div>
 
   <a-scene vr-mode-ui="enabled: false" loading-screen="dotsColor: white; backgroundColor: black">
-    
     <a-entity light="type: ambient; color: #FFF; intensity: 1.5"></a-entity>
-
+    
     <a-sky id="background-sky" src="" rotation="0 -90 0"></a-sky>
     
     <a-entity camera look-controls>
@@ -98,92 +81,77 @@
   <div class="thumbnail-container" id="thumb-scroll-container"></div>
 
   <script>
-    const totalImagesToCheck = 50; 
+    const totalImagesToCheck = 50; // 1번부터 50번까지 체크
     const container = document.getElementById('thumb-scroll-container');
     const sky = document.getElementById('background-sky');
-    const debugBox = document.getElementById('debug-console');
+    let firstLoaded = false; // 첫 번째 이미지가 로드되었는지 체크하는 플래그
 
-    // 디버그 창 켜고 끄는 함수
-    function toggleDebug() {
-      if (debugBox.style.display === 'none') {
-        debugBox.style.display = 'block';
-      } else {
-        debugBox.style.display = 'none';
-      }
+    // [핵심] 순서를 보장하기 위해 빈 슬롯(Placeholder)을 먼저 다 만들어 둡니다.
+    for (let i = 1; i <= totalImagesToCheck; i++) {
+      createSlotAndLoad(i);
     }
 
-    // 안전한 로그 기록 함수 (에러 방지)
-    function log(msg) {
-      if (debugBox) {
-        debugBox.innerHTML += msg + "<br>";
-        debugBox.scrollTop = debugBox.scrollHeight;
-      }
-      console.log(msg); // 브라우저 콘솔에도 기록
-    }
+    function createSlotAndLoad(index) {
+      // 1. 빈 껍데기(Wrapper) 생성 및 순서대로 배치
+      const wrapper = document.createElement('div');
+      wrapper.className = 'thumb-item';
+      wrapper.id = 'thumb-' + index;
+      container.appendChild(wrapper); // 여기서 이미 순서가 1~50으로 고정됨
 
-    // 이미지 로더
-    function createThumbnail(index) {
       const baseName = "image_" + index;
-      
-      const img = new Image();
-      const thumbWrapper = document.createElement('div');
-      thumbWrapper.className = 'thumb-item';
-      thumbWrapper.id = 'thumb-' + index;
-
-      // 1. PNG 먼저 시도
       const tryPng = baseName + ".png";
       const tryJpg = baseName + ".jpg";
 
+      // 2. 이미지 로딩 시도 (PNG -> 실패시 JPG)
+      const img = new Image();
+      
+      // PNG 우선 시도
       img.src = tryPng;
 
-      // PNG 성공 시
       img.onload = function() {
-        log(`✅ [${baseName}] PNG 로드 성공`);
-        finalizeThumbnail(thumbWrapper, img, tryPng, baseName, index);
+        // PNG 로드 성공
+        finalizeSlot(wrapper, img, tryPng, baseName);
       };
 
-      // PNG 실패 시 -> JPG 시도
       img.onerror = function() {
-        // 이미 JPG 시도 중이었다면 (src가 jpg로 끝난다면) -> 완전 실패
-        if (img.src.endsWith(".jpg")) {
-           // 조용히 종료 (로그만 남김)
-           console.log(`[${baseName}] 파일 없음`);
-           return;
+        // PNG 실패 -> JPG 시도
+        if (img.src.endsWith(".png")) {
+            // src를 jpg로 바꿔서 재시도 (새로운 요청)
+            img.src = tryJpg;
+        } else {
+            // JPG까지 실패 -> 파일 없음 -> 슬롯 삭제 (화면에서 제거)
+            wrapper.remove();
         }
-        
-        // PNG 실패했으니 JPG로 바꿔서 재시도
-        log(`⚠️ [${baseName}] PNG 없음. JPG 찾는 중...`);
-        img.src = tryJpg;
       };
     }
 
-    function finalizeThumbnail(wrapper, imgElement, realFileName, labelText, index) {
+    function finalizeSlot(wrapper, imgElement, realFileName, labelText) {
+      // 썸네일 구성
       const span = document.createElement('span');
-      span.textContent = labelText;
+      span.textContent = labelText; // 예: image_1
 
       wrapper.appendChild(imgElement);
       wrapper.appendChild(span);
+      
+      // 로딩 완료 클래스 추가 (display: none -> inline-block)
+      wrapper.classList.add('loaded');
 
+      // 클릭 이벤트
       wrapper.addEventListener('click', function() {
-        log(`🚀 배경 변경: ${realFileName}`);
         sky.setAttribute('src', realFileName);
         
+        // 하이라이트 효과 변경
         document.querySelectorAll('.thumb-item').forEach(item => item.classList.remove('active'));
         wrapper.classList.add('active');
       });
 
-      container.appendChild(wrapper);
-
-      // 첫 번째 이미지는 자동으로 배경 설정
-      if (index === 1) {
-        // 약간의 지연 후 실행 (안정성 확보)
-        setTimeout(() => wrapper.click(), 500);
+      // 가장 먼저 로딩 완료된 "유효한" 이미지를 배경으로 자동 설정
+      // (비동기라 순서가 뒤죽박죽 로딩되더라도, 아직 설정된 적이 없다면 이 이미지가 초기값)
+      if (!firstLoaded) {
+        firstLoaded = true;
+        // 약간의 딜레이 후 클릭 트리거 (A-Frame 렌더링 안정화)
+        setTimeout(() => wrapper.click(), 100);
       }
-    }
-
-    // 실행 시작
-    for (let i = 1; i <= totalImagesToCheck; i++) {
-      createThumbnail(i);
     }
   </script>
 </body>
