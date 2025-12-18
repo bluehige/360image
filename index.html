@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>360 이미지 갤러리 (Fixed)</title>
+  <title>360 이미지 갤러리 (Canvas Optimization)</title>
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <style>
     /* 썸네일 컨테이너 */
@@ -21,12 +21,11 @@
       z-index: 999;
     }
     
-    /* 스크롤바 스타일링 */
     .thumbnail-container::-webkit-scrollbar { height: 8px; }
     .thumbnail-container::-webkit-scrollbar-thumb { background: #FFD700; border-radius: 4px; }
 
     .thumb-item {
-      display: none; /* 로딩 전 숨김 */
+      display: none;
       margin-right: 15px;
       text-align: center;
       cursor: pointer;
@@ -35,7 +34,7 @@
       transition: 0.2s;
     }
     
-    .thumb-item.loaded { display: inline-block; } /* 로딩 완료 시 표시 */
+    .thumb-item.loaded { display: inline-block; }
 
     .thumb-item:hover { opacity: 1; transform: scale(1.05); }
     .thumb-item.active { opacity: 1; }
@@ -60,10 +59,12 @@
 </head>
 <body>
 
+  <canvas id="sky-buffer" width="4096" height="2048" style="display: none;"></canvas>
+
   <a-scene vr-mode-ui="enabled: false" loading-screen="dotsColor: white; backgroundColor: black">
     <a-entity light="type: ambient; color: #FFF; intensity: 1.5"></a-entity>
     
-    <a-sky id="background-sky" src="" rotation="0 -90 0"></a-sky>
+    <a-sky id="background-sky" src="#sky-buffer" rotation="0 -90 0"></a-sky>
     
     <a-entity camera look-controls>
       <a-cursor color="yellow" scale="0.5 0.5 0.5" raycaster="objects: none"></a-cursor>
@@ -76,9 +77,13 @@
     const totalImagesToCheck = 50; 
     const container = document.getElementById('thumb-scroll-container');
     const sky = document.getElementById('background-sky');
+    
+    // 캔버스 시스템 가져오기
+    const bufferCanvas = document.getElementById('sky-buffer');
+    const ctx = bufferCanvas.getContext('2d');
+    
     let firstLoaded = false; 
 
-    // 순서 보장을 위해 빈 슬롯 먼저 생성
     for (let i = 1; i <= totalImagesToCheck; i++) {
       createSlotAndLoad(i);
     }
@@ -94,50 +99,66 @@
       const jpgName = baseName + ".jpg";
 
       const img = new Image();
+      // CORS 문제 방지 (캔버스 사용 시 필수)
+      img.crossOrigin = "Anonymous"; 
       
-      // 현재 시도 중인 파일명을 추적하는 변수
       let currentSrc = pngName; 
       img.src = currentSrc;
 
       img.onload = function() {
-        // [수정된 부분] 성공했을 때, 'currentSrc' 변수에 담긴 파일명을 그대로 사용합니다.
-        // 이전 코드에서는 여기가 무조건 pngName으로 고정되어 있어서 오류가 났습니다.
-        finalizeSlot(wrapper, img, currentSrc, baseName);
+        finalizeSlot(wrapper, img, labelText = baseName);
       };
 
       img.onerror = function() {
         if (currentSrc === pngName) {
-            // PNG 실패 -> JPG로 변경 후 재시도
             currentSrc = jpgName;
             img.src = currentSrc;
         } else {
-            // JPG도 실패 -> 슬롯 삭제
             wrapper.remove();
         }
       };
     }
 
-    function finalizeSlot(wrapper, imgElement, realFileName, labelText) {
+    function finalizeSlot(wrapper, imgElement, labelText) {
       const span = document.createElement('span');
       span.textContent = labelText;
 
-      wrapper.appendChild(imgElement);
+      // 썸네일용 이미지는 복사본을 만들어 작게 표시 (메모리 절약)
+      const thumbImg = imgElement.cloneNode(); 
+      wrapper.appendChild(thumbImg);
       wrapper.appendChild(span);
       wrapper.classList.add('loaded');
 
       wrapper.addEventListener('click', function() {
-        // 배경 변경 (여기에 들어가는 realFileName이 이제 정확한 jpg/png 파일명이 됩니다)
-        sky.setAttribute('src', realFileName);
-        
+        // [핵심 기술] 이미지를 바로 넣지 않고, 캔버스에 '그려서' 넣습니다.
+        renderToSky(imgElement);
+
         document.querySelectorAll('.thumb-item').forEach(item => item.classList.remove('active'));
         wrapper.classList.add('active');
       });
 
-      // 첫 번째로 발견된 이미지를 초기 배경으로 설정
       if (!firstLoaded) {
         firstLoaded = true;
-        // 약간의 딜레이를 주어 A-Frame이 준비될 시간을 줍니다.
-        setTimeout(() => wrapper.click(), 500);
+        // 첫 번째 이미지 로딩 시 즉시 캔버스에 그리기
+        // 이미지가 로드된 상태이므로 setTimeout 없이 바로 그려도 됩니다.
+        renderToSky(imgElement);
+        wrapper.classList.add('active');
+      }
+    }
+
+    // [최적화 함수] 어떤 비율의 이미지든 4096x2048 캔버스에 맞춰서 그려버림
+    function renderToSky(sourceImg) {
+      // 1. 캔버스를 깨끗이 지웁니다.
+      ctx.clearRect(0, 0, bufferCanvas.width, bufferCanvas.height);
+      
+      // 2. 이미지를 캔버스 크기(4096x2048)에 강제로 맞춰서 그립니다.
+      // 이렇게 하면 16:9 이미지도 2:1로 변환되어 WebGL이 좋아합니다.
+      ctx.drawImage(sourceImg, 0, 0, bufferCanvas.width, bufferCanvas.height);
+      
+      // 3. A-Frame에게 "텍스처가 바뀌었으니 업데이트해!"라고 알립니다.
+      const mesh = sky.getObject3D('mesh');
+      if (mesh && mesh.material && mesh.material.map) {
+        mesh.material.map.needsUpdate = true;
       }
     }
   </script>
