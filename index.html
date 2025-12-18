@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>360 이미지 갤러리 (Final)</title>
+  <title>360 이미지 갤러리 (Fixed)</title>
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <style>
     /* 썸네일 컨테이너 */
@@ -21,29 +21,21 @@
       z-index: 999;
     }
     
-    /* 스크롤바 스타일링 (크롬, 사파리 등) */
-    .thumbnail-container::-webkit-scrollbar {
-      height: 8px;
-    }
-    .thumbnail-container::-webkit-scrollbar-thumb {
-      background: #FFD700;
-      border-radius: 4px;
-    }
+    /* 스크롤바 스타일링 */
+    .thumbnail-container::-webkit-scrollbar { height: 8px; }
+    .thumbnail-container::-webkit-scrollbar-thumb { background: #FFD700; border-radius: 4px; }
 
     .thumb-item {
-      display: none; /* 로딩 전에는 숨김 */
+      display: none; /* 로딩 전 숨김 */
       margin-right: 15px;
       text-align: center;
       cursor: pointer;
       flex-shrink: 0;
       opacity: 0.6;
       transition: 0.2s;
-      position: relative;
     }
     
-    .thumb-item.loaded {
-      display: inline-block; /* 로딩 완료 시 표시 */
-    }
+    .thumb-item.loaded { display: inline-block; } /* 로딩 완료 시 표시 */
 
     .thumb-item:hover { opacity: 1; transform: scale(1.05); }
     .thumb-item.active { opacity: 1; }
@@ -81,76 +73,71 @@
   <div class="thumbnail-container" id="thumb-scroll-container"></div>
 
   <script>
-    const totalImagesToCheck = 50; // 1번부터 50번까지 체크
+    const totalImagesToCheck = 50; 
     const container = document.getElementById('thumb-scroll-container');
     const sky = document.getElementById('background-sky');
-    let firstLoaded = false; // 첫 번째 이미지가 로드되었는지 체크하는 플래그
+    let firstLoaded = false; 
 
-    // [핵심] 순서를 보장하기 위해 빈 슬롯(Placeholder)을 먼저 다 만들어 둡니다.
+    // 순서 보장을 위해 빈 슬롯 먼저 생성
     for (let i = 1; i <= totalImagesToCheck; i++) {
       createSlotAndLoad(i);
     }
 
     function createSlotAndLoad(index) {
-      // 1. 빈 껍데기(Wrapper) 생성 및 순서대로 배치
       const wrapper = document.createElement('div');
       wrapper.className = 'thumb-item';
       wrapper.id = 'thumb-' + index;
-      container.appendChild(wrapper); // 여기서 이미 순서가 1~50으로 고정됨
+      container.appendChild(wrapper);
 
       const baseName = "image_" + index;
-      const tryPng = baseName + ".png";
-      const tryJpg = baseName + ".jpg";
+      const pngName = baseName + ".png";
+      const jpgName = baseName + ".jpg";
 
-      // 2. 이미지 로딩 시도 (PNG -> 실패시 JPG)
       const img = new Image();
       
-      // PNG 우선 시도
-      img.src = tryPng;
+      // 현재 시도 중인 파일명을 추적하는 변수
+      let currentSrc = pngName; 
+      img.src = currentSrc;
 
       img.onload = function() {
-        // PNG 로드 성공
-        finalizeSlot(wrapper, img, tryPng, baseName);
+        // [수정된 부분] 성공했을 때, 'currentSrc' 변수에 담긴 파일명을 그대로 사용합니다.
+        // 이전 코드에서는 여기가 무조건 pngName으로 고정되어 있어서 오류가 났습니다.
+        finalizeSlot(wrapper, img, currentSrc, baseName);
       };
 
       img.onerror = function() {
-        // PNG 실패 -> JPG 시도
-        if (img.src.endsWith(".png")) {
-            // src를 jpg로 바꿔서 재시도 (새로운 요청)
-            img.src = tryJpg;
+        if (currentSrc === pngName) {
+            // PNG 실패 -> JPG로 변경 후 재시도
+            currentSrc = jpgName;
+            img.src = currentSrc;
         } else {
-            // JPG까지 실패 -> 파일 없음 -> 슬롯 삭제 (화면에서 제거)
+            // JPG도 실패 -> 슬롯 삭제
             wrapper.remove();
         }
       };
     }
 
     function finalizeSlot(wrapper, imgElement, realFileName, labelText) {
-      // 썸네일 구성
       const span = document.createElement('span');
-      span.textContent = labelText; // 예: image_1
+      span.textContent = labelText;
 
       wrapper.appendChild(imgElement);
       wrapper.appendChild(span);
-      
-      // 로딩 완료 클래스 추가 (display: none -> inline-block)
       wrapper.classList.add('loaded');
 
-      // 클릭 이벤트
       wrapper.addEventListener('click', function() {
+        // 배경 변경 (여기에 들어가는 realFileName이 이제 정확한 jpg/png 파일명이 됩니다)
         sky.setAttribute('src', realFileName);
         
-        // 하이라이트 효과 변경
         document.querySelectorAll('.thumb-item').forEach(item => item.classList.remove('active'));
         wrapper.classList.add('active');
       });
 
-      // 가장 먼저 로딩 완료된 "유효한" 이미지를 배경으로 자동 설정
-      // (비동기라 순서가 뒤죽박죽 로딩되더라도, 아직 설정된 적이 없다면 이 이미지가 초기값)
+      // 첫 번째로 발견된 이미지를 초기 배경으로 설정
       if (!firstLoaded) {
         firstLoaded = true;
-        // 약간의 딜레이 후 클릭 트리거 (A-Frame 렌더링 안정화)
-        setTimeout(() => wrapper.click(), 100);
+        // 약간의 딜레이를 주어 A-Frame이 준비될 시간을 줍니다.
+        setTimeout(() => wrapper.click(), 500);
       }
     }
   </script>
