@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>360 이미지 갤러리 (Final Robust Ver)</title>
+  <title>360 이미지 갤러리 (Final Light Ver)</title>
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <style>
     /* 썸네일 컨테이너 */
@@ -55,7 +55,7 @@
       text-shadow: 1px 1px 2px black;
     }
 
-    /* 화면 당기기/스크롤 완전 차단 */
+    /* 모바일 스크롤/새로고침 당겨짐 방지 */
     body {
         overscroll-behavior: none;
         touch-action: none; 
@@ -71,93 +71,69 @@
       },
       init: function () {
         this.isDragging = false;
-        this.lastX = 0;
-        this.lastY = 0;
+        this.prevX = 0;
+        this.prevY = 0;
         
-        // [중요] 초기 각도를 0이 아니라 현재 카메라 각도에서 시작 (튀는 현상 방지)
+        // 현재 카메라 각도 가져오기
         this.yaw = this.el.object3D.rotation.y;
         this.pitch = this.el.object3D.rotation.x;
-        
-        this.onMouseDown = this.onMouseDown.bind(this);
-        this.onMouseMove = this.onMouseMove.bind(this);
-        this.onMouseUp = this.onMouseUp.bind(this);
-        this.onTouchStart = this.onTouchStart.bind(this);
-        this.onTouchMove = this.onTouchMove.bind(this);
-        this.onTouchEnd = this.onTouchEnd.bind(this);
 
-        window.addEventListener('mousedown', this.onMouseDown);
-        window.addEventListener('mousemove', this.onMouseMove);
-        window.addEventListener('mouseup', this.onMouseUp);
+        // this 바인딩 (이벤트 함수에서 this를 잃어버리지 않게 함)
+        this.onStart = this.onStart.bind(this);
+        this.onMove = this.onMove.bind(this);
+        this.onEnd = this.onEnd.bind(this);
+
+        // 마우스/터치 이벤트 등록
+        window.addEventListener('mousedown', this.onStart);
+        window.addEventListener('mousemove', this.onMove);
+        window.addEventListener('mouseup', this.onEnd);
         
-        window.addEventListener('touchstart', this.onTouchStart, { passive: false });
-        window.addEventListener('touchmove', this.onTouchMove, { passive: false });
-        window.addEventListener('touchend', this.onTouchEnd);
+        window.addEventListener('touchstart', this.onStart, { passive: false });
+        window.addEventListener('touchmove', this.onMove, { passive: false });
+        window.addEventListener('touchend', this.onEnd);
       },
 
-      // --- 마우스 ---
-      onMouseDown: function (evt) {
+      // 시작 (마우스 클릭 or 터치 시작)
+      onStart: function (evt) {
         this.isDragging = true;
-        this.lastX = evt.clientX;
-        this.lastY = evt.clientY;
+        // 터치인지 마우스인지 구별하여 좌표 저장
+        const point = evt.touches ? evt.touches[0] : evt;
+        this.prevX = point.clientX;
+        this.prevY = point.clientY;
       },
-      onMouseMove: function (evt) {
+
+      // 이동 (드래그 중)
+      onMove: function (evt) {
         if (!this.isDragging) return;
-        this.rotateCamera(evt.clientX, evt.clientY);
-      },
-      onMouseUp: function () {
-        this.isDragging = false;
-      },
 
-      // --- 터치 ---
-      onTouchStart: function (evt) {
-        // 손가락이 1개일 때만 작동 (확대/축소 제스처와 충돌 방지)
-        if (evt.touches.length === 1) {
-          this.isDragging = true;
-          this.lastX = evt.touches[0].clientX;
-          this.lastY = evt.touches[0].clientY;
-        }
-      },
-      onTouchMove: function (evt) {
-        if (!this.isDragging || evt.touches.length === 0) return;
-        evt.preventDefault(); 
+        // 터치라면 브라우저 스크롤 막기
+        if (evt.touches) evt.preventDefault();
+
+        const point = evt.touches ? evt.touches[0] : evt;
         
-        // [안전장치] 값이 확실히 있을 때만 실행
-        const x = evt.touches[0].clientX;
-        const y = evt.touches[0].clientY;
-        
-        if (x != null && y != null) {
-            this.rotateCamera(x, y);
-        }
-      },
-      onTouchEnd: function () {
-        this.isDragging = false;
-      },
+        // 이동 거리 계산
+        const deltaX = point.clientX - this.prevX;
+        const deltaY = point.clientY - this.prevY;
 
-      // --- 회전 계산 (안전장치 포함) ---
-      rotateCamera: function (clientX, clientY) {
-        // 값이 없거나 숫자가 아니면 중단 (흰색 화면 방지)
-        if (isNaN(clientX) || isNaN(clientY) || isNaN(this.lastX) || isNaN(this.lastY)) {
-            return;
-        }
+        // 현재 위치를 다음 계산을 위한 '이전 위치'로 저장
+        this.prevX = point.clientX;
+        this.prevY = point.clientY;
 
-        const deltaX = clientX - this.lastX;
-        const deltaY = clientY - this.lastY;
-
-        this.lastX = clientX;
-        this.lastY = clientY;
-
+        // 회전 적용
         this.yaw -= deltaX * this.schema.speed;
         this.pitch -= deltaY * this.schema.speed;
 
         // 상하 각도 제한 (-90도 ~ 90도)
-        const PI_2 = Math.PI / 2;
-        this.pitch = Math.max(-PI_2, Math.min(PI_2, this.pitch));
+        this.pitch = Math.max(-1.57, Math.min(1.57, this.pitch));
 
-        // [최종 적용 전 NaN 체크]
-        if (!isNaN(this.yaw) && !isNaN(this.pitch)) {
-            this.el.object3D.rotation.y = this.yaw;
-            this.el.object3D.rotation.x = this.pitch;
-        }
+        // 카메라에 반영
+        this.el.object3D.rotation.y = this.yaw;
+        this.el.object3D.rotation.x = this.pitch;
+      },
+
+      // 종료
+      onEnd: function () {
+        this.isDragging = false;
       }
     });
   </script>
