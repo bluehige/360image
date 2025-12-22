@@ -2,81 +2,61 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>360 이미지 갤러리 (Marzipano Edition)</title>
+  <title>360 갤러리 + 유튜브 핫스팟</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   
   <script src="https://cdn.jsdelivr.net/npm/marzipano@0.10.2/dist/marzipano.js"></script>
   
   <style>
-    /* 전체 화면 리셋 */
-    body, html {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      overflow: hidden; /* 스크롤 방지 */
-      background-color: #000;
-    }
+    body, html { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background-color: #000; }
+    #pano { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
 
-    /* 360 뷰어가 들어갈 공간 */
-    #pano {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 1;
-    }
-
-    /* 썸네일 컨테이너 (기존 디자인 유지) */
+    /* 썸네일 컨테이너 */
     .thumbnail-container {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      height: 120px;
-      background: rgba(0, 0, 0, 0.6);
-      display: flex;
-      align-items: center;
-      overflow-x: auto;
-      white-space: nowrap;
-      padding: 10px;
-      z-index: 999;
+      position: absolute; bottom: 0; left: 0; width: 100%; height: 120px;
+      background: rgba(0, 0, 0, 0.6); display: flex; align-items: center;
+      overflow-x: auto; white-space: nowrap; padding: 10px; z-index: 999;
     }
-    
     .thumbnail-container::-webkit-scrollbar { height: 8px; }
     .thumbnail-container::-webkit-scrollbar-thumb { background: #FFD700; border-radius: 4px; }
 
     .thumb-item {
-      display: none;
-      margin-right: 15px;
-      text-align: center;
-      cursor: pointer;
-      flex-shrink: 0;
-      opacity: 0.6;
-      transition: 0.2s;
+      display: none; margin-right: 15px; text-align: center; cursor: pointer;
+      flex-shrink: 0; opacity: 0.6; transition: 0.2s;
     }
-    
     .thumb-item.loaded { display: inline-block; }
     .thumb-item:hover { opacity: 1; transform: scale(1.05); }
     .thumb-item.active { opacity: 1; }
     .thumb-item.active img { border: 3px solid #FFD700; }
-    
-    .thumb-item img {
-      width: 140px;
-      height: 80px;
-      object-fit: cover;
-      border-radius: 5px;
-      background-color: #222;
+    .thumb-item img { width: 140px; height: 80px; object-fit: cover; border-radius: 5px; background-color: #222; }
+    .thumb-item span { display: block; color: white; font-size: 12px; margin-top: 5px; text-shadow: 1px 1px 2px black; font-family: sans-serif; }
+
+    /* --- [추가됨] 핫스팟(유튜브 버튼) 스타일 --- */
+    .youtube-hotspot {
+      width: 50px; height: 50px;
+      background-image: url('https://img.icons8.com/color/96/youtube-play.png'); /* 유튜브 아이콘 */
+      background-size: cover;
+      cursor: pointer;
+      opacity: 0.8;
+      transition: transform 0.2s;
     }
-    
-    .thumb-item span {
-      display: block;
-      color: white;
-      font-size: 12px;
-      margin-top: 5px;
-      text-shadow: 1px 1px 2px black;
-      font-family: sans-serif;
+    .youtube-hotspot:hover { transform: scale(1.2); opacity: 1; }
+
+    /* --- [추가됨] 유튜브 모달 팝업창 스타일 --- */
+    #video-modal {
+      display: none; /* 기본적으로 숨김 */
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8); z-index: 9999;
+      justify-content: center; align-items: center;
+    }
+    .modal-content {
+      position: relative; width: 80%; max-width: 800px; aspect-ratio: 16/9;
+      background: #000; box-shadow: 0 0 20px rgba(255,255,255,0.2);
+    }
+    .modal-content iframe { width: 100%; height: 100%; border: none; }
+    .close-btn {
+      position: absolute; top: -40px; right: 0;
+      color: white; font-size: 30px; cursor: pointer; font-weight: bold;
     }
   </style>
 </head>
@@ -86,34 +66,65 @@
 
   <div class="thumbnail-container" id="thumb-scroll-container"></div>
 
+  <div id="video-modal" onclick="closeModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="close-btn" onclick="closeModal()">✕ 닫기</div>
+      <iframe id="youtube-frame" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+    </div>
+  </div>
+
   <script>
+    // =========================================================
+    // [사용자 설정 구역] 여기에 유튜브를 넣고 싶은 이미지를 설정하세요.
+    // =========================================================
+    const youtubeHotspots = {
+            "image_1": [
+        { yaw: 0, pitch: 0, videoId: "HNhWlXeLnDY"
+          ]
+      // "이미지파일명(확장자제외)" : { yaw: 가로위치, pitch: 세로위치, videoId: "유튜브ID" }
+      
+      // 예시 1: image_1.png(jpg)에 핫스팟 추가 (정면)
+      "image_1": [
+        { yaw: 0, pitch: 0, videoId: "jNQXAC9IVRw" } // "Me at the zoo" 유튜브 예시
+      ],
+
+      // 예시 2: image_2에 핫스팟 2개 추가 (왼쪽, 오른쪽)
+      "image_2": [
+        { yaw: -0.5, pitch: 0.1, videoId: "LXb3EKWsInQ" }, // 4K 360 영상 예시
+        { yaw: 0.5, pitch: -0.1, videoId: "9bZkp7q19f0" }  // 강남스타일 예시
+      ]
+      
+      // 3번 이미지 등 나머지는 설정 안 하면 버튼 안 나옴
+    };
+    // =========================================================
+
     // 1. Marzipano 뷰어 설정
     var panoElement = document.getElementById('pano');
-    var viewerOpts = {
-      controls: {
-        mouseViewMode: 'drag'    // 마우스/터치 드래그로 회전
-      }
-    };
-    
-    // 뷰어 생성
+    var viewerOpts = { controls: { mouseViewMode: 'drag' } };
     var viewer = new Marzipano.Viewer(panoElement, viewerOpts);
-
-    // 공통 설정 (시야각 등)
     var limiter = Marzipano.RectilinearView.limit.traditional(4096, 100*Math.PI/180);
-    var viewOpts = {
-      yaw: 0,
-      pitch: 0,
-      fov: Math.PI / 2, // 기본 줌 상태
-      limits: limiter
-    };
+    var viewOpts = { yaw: 0, pitch: 0, fov: Math.PI / 2, limits: limiter };
 
-    // ---------------------------------------------------------
-    
     const totalImagesToCheck = 50; 
     const container = document.getElementById('thumb-scroll-container');
     let firstLoaded = false; 
 
-    // 순서대로 로딩 시작
+    // 모달 제어 함수
+    const modal = document.getElementById('video-modal');
+    const iframe = document.getElementById('youtube-frame');
+
+    function openModal(videoId) {
+      // 유튜브 링크 생성 (자동재생 포함)
+      iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+      modal.style.display = 'flex';
+    }
+
+    function closeModal() {
+      modal.style.display = 'none';
+      iframe.src = ''; // 영상 멈춤 (src 초기화)
+    }
+
+    // 이미지 로딩 루프
     for (let i = 1; i <= totalImagesToCheck; i++) {
       createSlotAndLoad(i);
     }
@@ -127,14 +138,12 @@
       const baseName = "image_" + index;
       const pngName = baseName + ".png";
       const jpgName = baseName + ".jpg";
-
-      // 실제 이미지 존재 여부 확인용
+      
       const img = new Image();
       let currentSrc = pngName; 
       img.src = currentSrc;
 
       img.onload = function() {
-        // 이미지가 로드되면 Marzipano 씬(Scene)을 생성합니다.
         createMarzipanoScene(wrapper, img, currentSrc, baseName);
       };
 
@@ -149,26 +158,19 @@
     }
 
     function createMarzipanoScene(wrapper, imgElement, realFileName, labelText) {
-      // 1. 썸네일 표시
+      // 썸네일 UI
       const span = document.createElement('span');
       span.textContent = labelText;
-      
       const thumbImg = imgElement.cloneNode();
       wrapper.appendChild(thumbImg);
       wrapper.appendChild(span);
       wrapper.classList.add('loaded');
 
-      // 2. Marzipano 소스 생성
-      // A-Frame과 달리 Marzipano는 이미지 크기를 자동으로 감지하여 최적화합니다.
+      // Marzipano Scene 생성
       var source = Marzipano.ImageUrlSource.fromString(realFileName);
-      
-      // 기하학적 구조 설정 (360 이미지 = Equirectangular)
       var geometry = new Marzipano.EquirectGeometry([{ width: 4096 }]);
-
-      // 뷰(카메라) 설정
       var view = new Marzipano.RectilinearView(viewOpts, limiter);
 
-      // 씬 생성 및 저장
       var scene = viewer.createScene({
         source: source,
         geometry: geometry,
@@ -176,15 +178,31 @@
         pinFirstLevel: true
       });
 
-      // 3. 클릭 이벤트 (씬 전환)
+      // [핵심] 핫스팟 추가 로직
+      // 이 이미지(labelText)에 설정된 핫스팟이 있는지 확인
+      if (youtubeHotspots[labelText]) {
+        youtubeHotspots[labelText].forEach(spotData => {
+          
+          // 핫스팟 요소(DIV) 만들기
+          var spotEl = document.createElement('div');
+          spotEl.className = 'youtube-hotspot';
+          
+          // 클릭 이벤트
+          spotEl.addEventListener('click', function() {
+            openModal(spotData.videoId);
+          });
+
+          // 씬에 추가 (위치 지정)
+          scene.hotspotContainer().createHotspot(spotEl, { yaw: spotData.yaw, pitch: spotData.pitch });
+        });
+      }
+
       wrapper.addEventListener('click', function() {
-        scene.switchTo(); // 이 씬으로 부드럽게 전환
-        
+        scene.switchTo(); 
         document.querySelectorAll('.thumb-item').forEach(item => item.classList.remove('active'));
         wrapper.classList.add('active');
       });
 
-      // 4. 첫 번째 이미지 자동 실행
       if (!firstLoaded) {
         firstLoaded = true;
         scene.switchTo();
