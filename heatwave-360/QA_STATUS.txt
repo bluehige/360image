@@ -1,0 +1,1 @@
+Rebuild QA passed locally: rendered 3D environments, UTF-8 DOM UI, world-anchored hotspots, Equirectangular and Cubemap mode parity.
