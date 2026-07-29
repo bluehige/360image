@@ -1,0 +1,163 @@
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import os
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import cv2
+import numpy as np
+from PIL import Image
+
+INF = 1e20
+
+
+def rgb(hex_value: int) -> np.ndarray:
+    return np.array([(hex_value >> 16) & 255, (hex_value >> 8) & 255, hex_value & 255], dtype=np.float32) / 255.0
+
+
+@dataclass
+class Primitive:
+    kind: str
+    name: str
+    center: tuple[float, float, float]
+    size: tuple[float, float, float]
+    color: tuple[float, float, float]
+    emissive: float = 0.0
+    params: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SceneDef:
+    scene_id: str
+    title: str
+    kind: str
+    camera: tuple[float, float, float]
+    objects: list[Primitive]
+    room_bounds: tuple[tuple[float, float, float], tuple[float, float, float]] | None = None
+    accent_wall: str = "back"
+    targets: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+def add_box(scene: SceneDef, name: str, center, size, color, emissive=0.0, **params):
+    scene.objects.append(Primitive("box", name, tuple(center), tuple(size), tuple(color), emissive, params))
+
+
+def add_ellipsoid(scene: SceneDef, name: str, center, radii, color, emissive=0.0, **params):
+    scene.objects.append(Primitive("ellipsoid", name, tuple(center), tuple(radii), tuple(color), emissive, params))
+
+
+def add_cylinder(scene: SceneDef, name: str, center, radius_height, color, emissive=0.0, **params):
+    # size=(radius, height, radius), vertical Y cylinder
+    r, h = radius_height
+    scene.objects.append(Primitive("cylinder", name, tuple(center), (r, h, r), tuple(color), emissive, params))
+
+
+def target(scene: SceneDef, key: str, point, width_deg: float, height_deg: float):
+    ox, oy, oz = scene.camera
+    px, py, pz = point
+    dx, dy, dz = px - ox, py - oy, pz - oz
+    dist_xz = math.hypot(dx, dz)
+    yaw = math.atan2(dx, dz)
+    pitch = math.atan2(dy, dist_xz)
+    scene.targets[key] = {
+        "yaw": yaw,
+        "pitch": pitch,
+        "width": math.radians(width_deg),
+        "height": math.radians(height_deg),
+    }
+
+
+def build_living() -> SceneDef:
+    s = SceneDef("living", "거실 · 폭염특보와 실내 냉방", "room", (0.0, 1.6, 0.0), [], ((-5.5, 0.0, -5.2), (5.5, 3.3, 5.2)), "back")
+    # Large architectural features
+    add_box(s, "window", (-3.4, 1.75, -5.08), (3.0, 2.1, 0.08), (0.34, 0.72, 0.92), emissive=0.8)
+    add_box(s, "window_frame_v", (-3.4, 1.75, -5.0), (0.08, 2.15, 0.12), (0.92, 0.94, 0.95))
+    add_box(s, "window_frame_h", (-3.4, 1.75, -5.0), (3.05, 0.08, 0.12), (0.92, 0.94, 0.95))
+    add_box(s, "curtain_l", (-5.05, 1.65, -4.86), (0.5, 2.6, 0.18), (0.18, 0.44, 0.55))
+    add_box(s, "curtain_r", (-1.78, 1.65, -4.86), (0.5, 2.6, 0.18), (0.18, 0.44, 0.55))
+
+    # TV wall at +Z, visible behind viewer when rotated
+    add_box(s, "tv_body", (2.75, 1.65, 4.95), (3.5, 1.9, 0.18), (0.035, 0.045, 0.055))
+    add_box(s, "tv_screen", (2.75, 1.65, 4.82), (3.18, 1.58, 0.08), (0.94, 0.36, 0.13), emissive=0.95)
+    # Screen visual cards, no text
+    add_box(s, "tv_alert_bar", (2.75, 2.22, 4.76), (2.7, 0.22, 0.04), (0.99, 0.84, 0.23), emissive=1.0)
+    add_box(s, "tv_map", (2.18, 1.55, 4.75), (1.35, 0.9, 0.04), (0.92, 0.22, 0.15), emissive=0.85)
+    add_box(s, "tv_info", (3.35, 1.55, 4.75), (0.72, 0.9, 0.04), (0.98, 0.75, 0.45), emissive=0.65)
+    add_box(s, "tv_console", (2.75, 0.58, 4.6), (4.0, 0.65, 0.75), (0.24, 0.19, 0.15))
+
+    # Sofa and rug
+    add_box(s, "rug", (-0.9, 0.035, 1.1), (4.2, 0.06, 2.8), (0.58, 0.32, 0.15))
+    add_ellipsoid(s, "sofa_shadow", (-2.0, 0.075, 2.75), (2.15, 0.05, 0.82), (0.12, 0.12, 0.10))
+    add_box(s, "sofa_base", (-2.0, 0.48, 2.7), (3.9, 0.75, 1.25), (0.11, 0.39, 0.43))
+    add_box(s, "sofa_back", (-2.0, 1.12, 3.12), (3.9, 1.2, 0.45), (0.12, 0.45, 0.48))
+    add_ellipsoid(s, "cushion_l", (-2.85, 1.0, 2.5), (0.65, 0.35, 0.48), (0.92, 0.66, 0.28))
+    add_ellipsoid(s, "cushion_r", (-1.25, 1.0, 2.5), (0.65, 0.35, 0.48), (0.84, 0.30, 0.20))
+
+    # Coffee table and remote/phone
+    add_ellipsoid(s, "table_shadow", (0.15, 0.075, 1.35), (1.5, 0.04, 0.78), (0.13, 0.12, 0.10))
+    add_box(s, "table_top", (0.15, 0.58, 1.35), (2.6, 0.15, 1.25), (0.40, 0.22, 0.11))
+    for x in (-0.9, 1.2):
+        for z in (0.95, 1.75):
+            add_box(s, "table_leg", (x, 0.28, z), (0.14, 0.55, 0.14), (0.18, 0.14, 0.11))
+    add_box(s, "remote", (0.55, 0.7, 1.2), (0.35, 0.08, 0.75), (0.045, 0.055, 0.065))
+    add_box(s, "remote_display", (0.55, 0.745, 1.0), (0.22, 0.015, 0.22), (0.21, 0.92, 0.95), emissive=0.9)
+    add_box(s, "phone", (-0.55, 0.72, 1.35), (0.42, 0.08, 0.78), (0.03, 0.04, 0.05))
+    add_box(s, "phone_screen", (-0.55, 0.77, 1.35), (0.35, 0.02, 0.64), (0.98, 0.78, 0.18), emissive=1.0)
+
+    # AC and circulator
+    add_box(s, "ac", (3.55, 2.52, -4.95), (2.8, 0.62, 0.28), (0.93, 0.96, 0.98))
+    add_box(s, "ac_vent", (3.55, 2.34, -4.76), (2.35, 0.16, 0.06), (0.10, 0.18, 0.22))
+    add_cylinder(s, "fan_pole", (-4.15, 0.85, 2.25), (0.11, 1.45), (0.28, 0.32, 0.34))
+    add_cylinder(s, "fan_base", (-4.15, 0.12, 2.25), (0.52, 0.18), (0.22, 0.25, 0.27))
+    add_cylinder(s, "fan_ring", (-4.15, 1.65, 2.25), (0.62, 0.16), (0.35, 0.39, 0.41))
+    add_ellipsoid(s, "fan_center", (-4.15, 1.65, 2.18), (0.16, 0.16, 0.12), (0.11, 0.14, 0.16))
+    # Plant and ceiling lights
+    add_cylinder(s, "plant_pot", (4.55, 0.42, 2.85), (0.38, 0.72), (0.54, 0.28, 0.16))
+    for px, pz, rr in [(4.25,2.85,0.55),(4.68,2.68,0.62),(4.63,3.08,0.5)]:
+        add_ellipsoid(s, "plant_leaf", (px, 1.15, pz), (rr, 0.8, rr*0.45), (0.12, 0.47, 0.24))
+    add_cylinder(s, "ceiling_light", (0.0, 3.12, 0.0), (0.72, 0.13), (0.98, 0.88, 0.58), emissive=0.9)
+    # Door to entryway
+    add_box(s, "door", (-5.38, 1.35, -1.25), (0.16, 2.7, 1.8), (0.42, 0.27, 0.16))
+    add_ellipsoid(s, "door_handle", (-5.25, 1.35, -0.62), (0.08, 0.08, 0.08), (0.85, 0.70, 0.28), emissive=0.2)
+
+    target(s, "tv", (2.75, 1.65, 4.78), 27, 18)
+    target(s, "phone", (-0.55, 0.75, 1.35), 10, 10)
+    target(s, "remote", (0.55, 0.73, 1.2), 9, 12)
+    target(s, "fan", (-4.15, 1.65, 2.2), 16, 19)
+    target(s, "door", (-5.25, 1.45, -1.25), 18, 30)
+    return s
+
+
+def build_entry() -> SceneDef:
+    s = SceneDef("entry", "현관 · 여름 외출 준비", "room", (0.0, 1.6, 0.0), [], ((-4.8, 0.0, -4.8), (4.8, 3.15, 4.8)), "left")
+    # Main door and shoe cabinet
+    add_box(s, "front_door", (0.0, 1.45, 4.67), (2.45, 2.9, 0.22), (0.20, 0.27, 0.30))
+    add_box(s, "door_panel", (0.0, 1.5, 4.52), (1.9, 2.35, 0.08), (0.31, 0.38, 0.40))
+    add_ellipsoid(s, "door_handle", (0.83, 1.48, 4.37), (0.09, 0.09, 0.09), (0.87, 0.72, 0.29), emissive=0.2)
+    add_ellipsoid(s, "cabinet_shadow", (-3.55, 0.05, 3.8), (1.05, 0.04, 0.75), (0.13, 0.12, 0.10))
+    add_box(s, "shoe_cabinet", (-3.55, 0.72, 3.8), (1.85, 1.35, 1.2), (0.60, 0.49, 0.34))
+    add_box(s, "bench", (2.75, 0.46, 3.65), (2.3, 0.48, 0.85), (0.44, 0.30, 0.20))
+    add_box(s, "bench_cushion", (2.75, 0.75, 3.65), (2.15, 0.18, 0.75), (0.16, 0.46, 0.50))
+
+    # Mirror and wall hooks
+    add_box(s, "mirror", (-4.66, 1.75, -1.1), (0.12, 2.2, 1.5), (0.42, 0.78, 0.86), emissive=0.35)
+    add_box(s, "hook_bar", (4.65, 2.0, -0.8), (0.15, 0.18, 2.3), (0.18, 0.17, 0.16))
+    for z in (-1.65, -0.85, -0.05):
+        add_ellipsoid(s, "hook", (4.52, 1.86, z), (0.11, 0.11, 0.11), (0.76, 0.60, 0.27), emissive=0.15)
+
+    # Bag on bench
+    add_box(s, "bag", (2.7, 1.05, 3.55), (1.0, 0.85, 0.42), (0.93, 0.53, 0.18))
+    add_ellipsoid(s, "bag_handle", (2.7, 1.48, 3.55), (0.42, 0.28, 0.10), (0.25, 0.16, 0.10))
+
+    # Items placed around the entry
+    # Parasol
+    add_cylinder(s, "parasol_shaft", (-3.95, 0.88, 0.75), (0.055, 1.7), (0.55, 0.40, 0.22))
+    add_ellipsoid(s, "parasol", (-3.95, 1.68, 0.75), (0.25, 0.75, 0.25), (0.93, 0.22, 0.25))
+    # Cap
+    add_ellipsoid(s, "cap", (-2.55, 1.55, -4.48), (0.52, 0.30, 0.44), (0.97, 0.76, 0.18))
+    add_box(s, "cap_brim", (-2.55, 1.36, -4.18), (0.75, 0.08, 0.55), (0.96, 0.72, 0.1
