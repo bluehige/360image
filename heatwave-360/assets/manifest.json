@@ -1,0 +1,231 @@
+{
+  "version": 2,
+  "generated": "2026-07-29T03:20:58Z",
+  "faceSize": 1024,
+  "panoSize": [
+    4096,
+    2048
+  ],
+  "quality": 82,
+  "scenes": [
+    {
+      "id": "living",
+      "title": "거실 · 폭염특보와 실내 냉방",
+      "equirect": {
+        "path": "assets/equirect/living.webp",
+        "bytes": 66334
+      },
+      "cubemap": {
+        "px": {
+          "path": "assets/cubemap/living/px.webp",
+          "bytes": 7532
+        },
+        "nx": {
+          "path": "assets/cubemap/living/nx.webp",
+          "bytes": 8734
+        },
+        "py": {
+          "path": "assets/cubemap/living/py.webp",
+          "bytes": 3936
+        },
+        "ny": {
+          "path": "assets/cubemap/living/ny.webp",
+          "bytes": 6134
+        },
+        "pz": {
+          "path": "assets/cubemap/living/pz.webp",
+          "bytes": 13740
+        },
+        "nz": {
+          "path": "assets/cubemap/living/nz.webp",
+          "bytes": 7538
+        }
+      },
+      "targets": {
+        "tv": {
+          "yaw": 0.5220700825217711,
+          "pitch": 0.009066579363477054,
+          "width": 0.47123889803846897,
+          "height": 0.3141592653589793
+        },
+        "phone": {
+          "yaw": -0.3868757177310281,
+          "pitch": -0.5278967475527339,
+          "width": 0.17453292519943295,
+          "height": 0.17453292519943295
+        },
+        "remote": {
+          "yaw": 0.42976227909668857,
+          "pitch": -0.5827263091928002,
+          "width": 0.15707963267948966,
+          "height": 0.20943951023931956
+        },
+        "fan": {
+          "yaw": -1.0833436916090207,
+          "pitch": 0.010644523860948272,
+          "width": 0.2792526803190927,
+          "height": 0.33161255787892263
+        },
+        "door": {
+          "yaw": -1.804539507663798,
+          "pitch": -0.027787309219958006,
+          "width": 0.3141592653589793,
+          "height": 0.5235987755982988
+        }
+      },
+      "renderSeconds": 76.381
+    },
+    {
+      "id": "entry",
+      "title": "현관 · 여름 외출 준비",
+      "equirect": {
+        "path": "assets/equirect/entry.webp",
+        "bytes": 54376
+      },
+      "cubemap": {
+        "px": {
+          "path": "assets/cubemap/entry/px.webp",
+          "bytes": 9518
+        },
+        "nx": {
+          "path": "assets/cubemap/entry/nx.webp",
+          "bytes": 7422
+        },
+        "py": {
+          "path": "assets/cubemap/entry/py.webp",
+          "bytes": 3744
+        },
+        "ny": {
+          "path": "assets/cubemap/entry/ny.webp",
+          "bytes": 4476
+        },
+        "pz": {
+          "path": "assets/cubemap/entry/pz.webp",
+          "bytes": 8082
+        },
+        "nz": {
+          "path": "assets/cubemap/entry/nz.webp",
+          "bytes": 7814
+        }
+      },
+      "targets": {
+        "bag": {
+          "yaw": 0.6570749357116535,
+          "pitch": -0.09472949257503382,
+          "width": 0.3141592653589793,
+          "height": 0.3141592653589793
+        },
+        "parasol": {
+          "yaw": -1.3831565549905305,
+          "pitch": -0.09916202198848158,
+          "width": 0.20943951023931956,
+          "height": 0.47123889803846897
+        },
+        "cap": {
+          "yaw": -2.611376880813163,
+          "pitch": -0.015864378753148865,
+          "width": 0.24434609527920614,
+          "height": 0.20943951023931956
+        },
+        "bottle": {
+          "yaw": 3.0993642514767914,
+          "pitch": -0.20802564772758989,
+          "width": 0.17453292519943295,
+          "height": 0.3490658503988659
+        },
+        "fan": {
+          "yaw": 2.361619391766278,
+          "pitch": -0.10193785962017647,
+          "width": 0.24434609527920614,
+          "height": 0.20943951023931956
+        },
+        "towel": {
+          "yaw": 2.2251665727654513,
+          "pitch": -0.09751007962024635,
+          "width": 0.22689280275926285,
+          "height": 0.17453292519943295
+        },
+        "door": {
+          "yaw": 0.0,
+          "pitch": -0.022218565326719078,
+          "width": 0.4188790204786391,
+          "height": 0.6283185307179586
+        }
+      },
+      "renderSeconds": 47.116
+    },
+    {
+      "id": "park",
+      "title": "야외공원 · 온열질환 응급조치",
+      "equirect": {
+        "path": "assets/equirect/park.webp",
+        "bytes": 80596
+      },
+      "cubemap": {
+        "px": {
+          "path": "assets/cubemap/park/px.webp",
+          "bytes": 18332
+        },
+        "nx": {
+          "path": "assets/cubemap/park/nx.webp",
+          "bytes": 16586
+        },
+        "py": {
+          "path": "assets/cubemap/park/py.webp",
+          "bytes": 1944
+        },
+        "ny": {
+          "path": "assets/cubemap/park/ny.webp",
+          "bytes": 9670
+        },
+        "pz": {
+          "path": "assets/cubemap/park/pz.webp",
+          "bytes": 12950
+        },
+        "nz": {
+          "path": "assets/cubemap/park/nz.webp",
+          "bytes": 12536
+        }
+      },
+      "targets": {
+        "patient": {
+          "yaw": -1.5707963267948966,
+          "pitch": -0.43772149074023564,
+          "width": 0.4188790204786391,
+          "height": 0.29670597283903605
+        },
+        "shade": {
+          "yaw": -1.0447299077981331,
+          "pitch": -0.07517837593414858,
+          "width": 0.5235987755982988,
+          "height": 0.4363323129985824
+        },
+        "phone": {
+          "yaw": 0.8097835725701669,
+          "pitch": -0.5250675846360744,
+          "width": 0.19198621771937624,
+          "height": 0.24434609527920614
+        },
+        "towel": {
+          "yaw": 1.648762960626439,
+          "pitch": -0.4112943558182308,
+          "width": 0.24434609527920614,
+          "height": 0.19198621771937624
+        },
+        "drink": {
+          "yaw": 1.6142472221864275,
+          "pitch": -0.37266739441772595,
+          "width": 0.17453292519943295,
+          "height": 0.29670597283903605
+        },
+        "fan": {
+          "yaw": 1.3574276846430886,
+          "pitch": -0.4061167784064284,
+          "width": 0.22689280275926285,
+          "height": 0.19198621771937624
+        }
+      },
+      "renderSeconds": 73.099
+    }
+  ]
+}
