@@ -1,0 +1,10 @@
+(a,s)=>a+s.equirect.bytes,0);const cube=MANIFEST.scenes.reduce((a,s)=>a+Object.values(s.cubemap).reduce((b,f)=>b+f.bytes,0),0);$('#eqSize').textContent=formatBytes(eq);$('#cubeSize').textContent=formatBytes(cube);$('#eqPixels').textContent=(MANIFEST.panoSize[0]*MANIFEST.panoSize[1]*MANIFEST.scenes.length).toLocaleString()+' px';$('#cubePixels').textContent=(MANIFEST.faceSize*MANIFEST.faceSize*6*MANIFEST.scenes.length).toLocaleString()+' px';$('#eqLoad').textContent=assetLoadMs.equirect==null?'미측정':assetLoadMs.equirect+' ms';$('#cubeLoad').textContent=assetLoadMs.cubemap==null?'미측정':assetLoadMs.cubemap+' ms';$('#benchMode').textContent=mode==='equirect'?'Equirectangular':'Cubemap';$('#benchFps').textContent=fps?fps+' FPS':'측정 중';}
+function openBenchmark(){updateBenchmark();$('#benchmarkModal').classList.add('show');}
+function closeBenchmark(){$('#benchmarkModal').classList.remove('show');}
+async function startExperience(startMode){$('#introCard').classList.remove('show');started=true;stepIndex=0;currentSceneId='living';await setMode(startMode,false);await enterScene('living');showPrompt();}
+$('#startEq').onclick=()=>startExperience('equirect');$('#startCube').onclick=()=>startExperience('cubemap');$('#introCompare').onclick=openBenchmark;$('#compareBtn').onclick=openBenchmark;$('#completeCompare').onclick=openBenchmark;$('#closeBenchmark').onclick=closeBenchmark;$('#benchmarkModal').addEventListener('click',e=>{if(e.target.id==='benchmarkModal')closeBenchmark();});$('#resetViewBtn').onclick=resetView;document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=async()=>{if(b.dataset.mode===mode)return;await setMode(b.dataset.mode,true);});$('#restartBtn').onclick=async()=>{$('#completeCard').classList.remove('show');stepIndex=0;currentSceneId='living';await enterScene('living');showPrompt();};
+setMode(mode,false);updateBenchmark();
+if(new URLSearchParams(location.search).get('mode')==='benchmark')openBenchmark();
+</script>
+</body>
+</html>
