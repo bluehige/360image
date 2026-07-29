@@ -1,0 +1,86 @@
+name: Deploy rendered heatwave 360
+
+on:
+  push:
+    paths:
+      - '.github/workflows/deploy-heatwave-rendered.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  render-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Reconstruct render source and viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/heatwave360-v2/gen_*.txt > /tmp/generate_assets.py
+          cat .github/heatwave360-v2/tpl_*.txt > /tmp/index.template.html
+          sed -i '/^import cv2$/d' /tmp/generate_assets.py
+          python -m py_compile /tmp/generate_assets.py
+
+      - name: Install renderer dependencies
+        run: python -m pip install --disable-pip-version-check numpy pillow
+
+      - name: Render Equirectangular and Cubemap environments
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf heatwave-360
+          mkdir -p heatwave-360
+          python /tmp/generate_assets.py --output heatwave-360 --face-size 1024 --pano-width 4096 --quality 82
+          rm -f heatwave-360/assets/preview_*.jpg
+
+      - name: Build UTF-8 DOM viewer and validate output
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          from PIL import Image
+
+          root = Path('heatwave-360')
+          manifest_path = root / 'assets' / 'manifest.json'
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          template = Path('/tmp/index.template.html').read_text(encoding='utf-8')
+          assert '__MANIFEST__' in template
+          html = template.replace('__MANIFEST__', json.dumps(manifest, ensure_ascii=False, separators=(',', ':')))
+          assert '__MANIFEST__' not in html
+          assert '<meta charset="utf-8">' in html
+          assert 'function updateHotspot()' in html
+          assert "const forward=[sy*cp,sp,cy*cp]" in html
+          (root / 'index.html').write_text(html, encoding='utf-8')
+
+          assert len(manifest['scenes']) == 3
+          for scene in manifest['scenes']:
+              pano = root / scene['equirect']['path']
+              assert Image.open(pano).size == (4096, 2048)
+              for face in scene['cubemap'].values():
+                  assert Image.open(root / face['path']).size == (1024, 1024)
+          print('QA passed: UTF-8 DOM UI, world-anchored hotspot projection, 3 rendered scenes, both texture formats.')
+          PY
+
+      - name: Remove obsolete prototype and build staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/heatwave360-v2
+          rm -rf .github/scripts/heatwave360_payload
+          rm -f .github/workflows/deploy-heatwave-rendered.yml
+
+      - name: Commit rendered experience
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Deploy corrected rendered heatwave 360 experience'
+          git push
