@@ -1,0 +1,84 @@
+ / 2, tmin, 30.0)
+    if scene.kind == "park":
+        fog = np.clip((dist - 9.0) / 20.0, 0.0, 0.52)[..., None]
+        fog_color = np.array([0.73, 0.85, 0.86], np.float32)
+        sky_mask = (tmin >= INF / 2)[..., None]
+        fog = np.where(sky_mask, 0.0, fog)
+        color = color * (1.0 - fog) + fog_color * fog
+    else:
+        fog = np.clip((dist - 5.0) / 8.0, 0.0, 0.12)[..., None]
+        color = color * (1.0 - fog) + np.array([0.84, 0.80, 0.71], np.float32) * fog
+
+    # Preserve contrast. The palette values are authored in display space, so avoid a second gamma lift.
+    color = np.clip(color * 1.06, 0, 1)
+    color = np.clip((color - 0.035) * 1.12 + 0.035, 0, 1)
+    return (color * 255.0 + 0.5).astype(np.uint8)
+
+
+def render_face(scene: SceneDef, face: str, size: int, chunk_rows: int = 96) -> np.ndarray:
+    out = np.zeros((size, size, 3), np.uint8)
+    for y0 in range(0, size, chunk_rows):
+        y1 = min(size, y0 + chunk_rows)
+        dirs = directions_for_face(face, size, y0, y1)
+        out[y0:y1] = render_chunk(scene, dirs)
+    return out
+
+
+def directions_equirect(width: int, height: int, y0: int, y1: int) -> np.ndarray:
+    yaws = ((np.arange(width, dtype=np.float32) + 0.5) / width) * (2.0 * np.pi) - np.pi
+    pitches = np.pi * 0.5 - ((np.arange(y0, y1, dtype=np.float32) + 0.5) / height) * np.pi
+    yaw, pitch = np.meshgrid(yaws, pitches)
+    cp = np.cos(pitch)
+    d = np.stack([cp * np.sin(yaw), np.sin(pitch), cp * np.cos(yaw)], axis=-1)
+    return d.astype(np.float32)
+
+
+def render_equirect(scene: SceneDef, width: int, height: int, chunk_rows: int = 40) -> np.ndarray:
+    out = np.zeros((height, width, 3), np.uint8)
+    for y0 in range(0, height, chunk_rows):
+        y1 = min(height, y0 + chunk_rows)
+        dirs = directions_equirect(width, height, y0, y1)
+        out[y0:y1] = render_chunk(scene, dirs)
+    return out
+
+
+def cubemap_to_equirect(faces: dict[str, np.ndarray], width: int, height: int) -> np.ndarray:
+    # Build in row chunks to keep memory bounded. Bilinear sampling through cv2.remap per face.
+    out = np.zeros((height, width, 3), np.uint8)
+    face_size = next(iter(faces.values())).shape[0]
+    xs = ((np.arange(width, dtype=np.float32) + 0.5) / width) * (2.0 * np.pi) - np.pi
+    for y0 in range(0, height, 128):
+        y1 = min(height, y0 + 128)
+        pitches = np.pi * 0.5 - ((np.arange(y0, y1, dtype=np.float32) + 0.5) / height) * np.pi
+        yaw, pitch = np.meshgrid(xs, pitches)
+        cp = np.cos(pitch)
+        x = cp * np.sin(yaw)
+        y = np.sin(pitch)
+        z = cp * np.cos(yaw)
+        ax, ay, az = np.abs(x), np.abs(y), np.abs(z)
+        major = np.maximum(np.maximum(ax, ay), az)
+        face_idx = np.empty(x.shape, np.int8)
+        uu = np.zeros(x.shape, np.float32)
+        vv = np.zeros(x.shape, np.float32)
+        # 0 px,1 nx,2 py,3 ny,4 pz,5 nz
+        m = (ax >= ay) & (ax >= az) & (x > 0)
+        face_idx[m] = 0; uu[m] = -z[m] / ax[m]; vv[m] = -y[m] / ax[m]
+        m = (ax >= ay) & (ax >= az) & (x <= 0)
+        face_idx[m] = 1; uu[m] = z[m] / ax[m]; vv[m] = -y[m] / ax[m]
+        m = (ay > ax) & (ay >= az) & (y > 0)
+        face_idx[m] = 2; uu[m] = x[m] / ay[m]; vv[m] = z[m] / ay[m]
+        m = (ay > ax) & (ay >= az) & (y <= 0)
+        face_idx[m] = 3; uu[m] = x[m] / ay[m]; vv[m] = -z[m] / ay[m]
+        m = (az > ax) & (az > ay) & (z > 0)
+        face_idx[m] = 4; uu[m] = x[m] / az[m]; vv[m] = -y[m] / az[m]
+        m = (az > ax) & (az > ay) & (z <= 0)
+        face_idx[m] = 5; uu[m] = -x[m] / az[m]; vv[m] = -y[m] / az[m]
+        map_x = (uu * 0.5 + 0.5) * face_size - 0.5
+        map_y = (vv * 0.5 + 0.5) * face_size - 0.5
+        chunk = np.zeros((y1-y0, width, 3), np.uint8)
+        for idx, key in enumerate(["px", "nx", "py", "ny", "pz", "nz"]):
+            sampled = cv2.remap(faces[key], map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+            mask = face_idx == idx
+            chunk[mask] = sampled[mask]
+        out[y0:y1] = chunk
+    return o
