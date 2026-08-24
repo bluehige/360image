@@ -1,0 +1,44 @@
+name: Fire Photoreal F01 Test
+
+on:
+  push:
+    branches:
+      - temp/fire-extinguisher-photoreal-final
+    paths:
+      - 'fire_ref/**'
+      - '.github/workflows/fire-photoreal-f01.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  generate-f01:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install generation client
+        run: python -m pip install --upgrade gradio_client pillow
+
+      - name: Generate F01
+        shell: bash
+        run: |
+          mkdir -p fire_output
+          set -o pipefail
+          python fire_ref/generate_f01.py 2>&1 | tee fire_output/runner.log
+
+      - name: Upload F01 artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fire-photoreal-f01
+          path: fire_output/**
+          if-no-files-found: warn
+          retention-days: 3
