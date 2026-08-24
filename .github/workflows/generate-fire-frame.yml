@@ -1,0 +1,33 @@
+name: Generate photoreal fire training frame
+
+on:
+  push:
+    branches:
+      - temp/fire-extinguisher-photoreal-frames
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install client dependencies
+        run: python -m pip install --upgrade gradio_client pillow
+      - name: Generate F01
+        run: python scripts/generate_fire_frames.py --only F01
+      - name: Upload generated frame
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fire-training-F01
+          path: generated_fire_frames/
+          if-no-files-found: warn
+          retention-days: 7
