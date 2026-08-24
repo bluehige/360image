@@ -1,0 +1,70 @@
+name: Fire Photoreal Targeted Repairs
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'fire_repair/repair_frame.py'
+      - '.github/workflows/fire-photoreal-repair.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  repair-frame:
+    if: github.head_ref == 'temp/fire-extinguisher-repair-run'
+    strategy:
+      fail-fast: false
+      matrix:
+        frame: [3, 4, 5, 7, 8, 9, 14, 15, 17, 18, 20, 21, 22, 23]
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download main batch artifacts
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: bluehige/360image
+          run-id: 32680283285
+          pattern: fire-photoreal-*
+          path: baseline_main
+          merge-multiple: true
+
+      - name: Download missing-frame artifacts
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: bluehige/360image
+          run-id: 32680659060
+          pattern: fire-photoreal-F*
+          path: baseline_missing
+          merge-multiple: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install generation client
+        run: python -m pip install --upgrade gradio_client pillow
+
+      - name: Repair F${{ matrix.frame }}
+        shell: bash
+        run: |
+          mkdir -p repair_output
+          set -o pipefail
+          python fire_repair/repair_frame.py '${{ matrix.frame }}' 2>&1 | tee repair_output/runner_F${{ matrix.frame }}.log
+
+      - name: Upload repaired frame
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fire-repaired-F${{ matrix.frame }}
+          path: repair_output/**
+          if-no-files-found: warn
+          retention-days: 3
