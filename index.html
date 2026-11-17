@@ -129,7 +129,7 @@
       container.appendChild(wrapper);
 
       const baseName = "image_" + index;
-      const pngName = baseName + ".png" + (index === openingImage ? "?v=redrawn" : "");
+      const pngName = baseName + ".png" + (index === openingImage ? "?v=wide-shot" : "");
       const jpgName = baseName + ".jpg";
 
       // 실제 이미지 존재 여부 확인용
@@ -177,8 +177,8 @@
       var sceneLimiter = limiter;
       if (isOpeningImage) {
         const radians = Math.PI / 180;
-        sceneViewOpts = { yaw: 0, pitch: 27 * radians, fov: 98 * radians };
-        sceneLimiter = Marzipano.RectilinearView.limit.traditional(4096, 108 * radians, 139 * radians);
+        sceneViewOpts = { yaw: 0, pitch: 14 * radians, fov: 78 * radians };
+        sceneLimiter = Marzipano.RectilinearView.limit.traditional(4096, 96 * radians, 125 * radians);
       }
       var view = new Marzipano.RectilinearView(sceneViewOpts, sceneLimiter);
 
