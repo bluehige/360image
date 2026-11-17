@@ -138,7 +138,7 @@
 
       img.onload = function() {
         // 이미지가 로드되면 Marzipano 씬(Scene)을 생성합니다.
-        createMarzipanoScene(wrapper, img, currentSrc, labelText ?? baseName);
+        createMarzipanoScene(wrapper, img, currentSrc, labelText ?? baseName, index === openingImage);
         onSettled?.();
       };
 
@@ -155,7 +155,7 @@
       img.src = currentSrc;
     }
 
-    function createMarzipanoScene(wrapper, imgElement, realFileName, labelText) {
+    function createMarzipanoScene(wrapper, imgElement, realFileName, labelText, isOpeningImage) {
       // 1. 썸네일 표시
       const span = document.createElement('span');
       span.textContent = labelText;
@@ -173,7 +173,16 @@
       var geometry = new Marzipano.EquirectGeometry([{ width: 4096 }]);
 
       // 뷰(카메라) 설정
-      var view = new Marzipano.RectilinearView(viewOpts, limiter);
+      var sceneViewOpts = viewOpts;
+      var sceneLimiter = limiter;
+      if (isOpeningImage) {
+        const radians = Math.PI / 180;
+        const aspect = panoElement.clientWidth / panoElement.clientHeight;
+        const portraitFov = 2 * Math.atan(Math.tan(46 * radians) / aspect);
+        sceneViewOpts = { yaw: 0, pitch: 0, fov: Math.min(132 * radians, Math.max(102 * radians, portraitFov)) };
+        sceneLimiter = Marzipano.RectilinearView.limit.traditional(4096, 132 * radians, 156 * radians);
+      }
+      var view = new Marzipano.RectilinearView(sceneViewOpts, sceneLimiter);
 
       // 씬 생성 및 저장
       var scene = viewer.createScene({
