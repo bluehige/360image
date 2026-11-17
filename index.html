@@ -113,12 +113,16 @@
     const container = document.getElementById('thumb-scroll-container');
     let firstLoaded = false; 
 
-    // 순서대로 로딩 시작
-    for (let i = 1; i <= totalImagesToCheck; i++) {
-      createSlotAndLoad(i);
+    const openingImage = 4;
+    createSlotAndLoad(openingImage, '이연 · 백팔검진', loadGallery);
+
+    function loadGallery() {
+      for (let i = 1; i <= totalImagesToCheck; i++) {
+        if (i !== openingImage) createSlotAndLoad(i);
+      }
     }
 
-    function createSlotAndLoad(index) {
+    function createSlotAndLoad(index, labelText, onSettled) {
       const wrapper = document.createElement('div');
       wrapper.className = 'thumb-item';
       wrapper.id = 'thumb-' + index;
@@ -131,11 +135,11 @@
       // 실제 이미지 존재 여부 확인용
       const img = new Image();
       let currentSrc = pngName; 
-      img.src = currentSrc;
 
       img.onload = function() {
         // 이미지가 로드되면 Marzipano 씬(Scene)을 생성합니다.
-        createMarzipanoScene(wrapper, img, currentSrc, baseName);
+        createMarzipanoScene(wrapper, img, currentSrc, labelText ?? baseName);
+        onSettled?.();
       };
 
       img.onerror = function() {
@@ -144,8 +148,11 @@
             img.src = currentSrc;
         } else {
             wrapper.remove();
+            onSettled?.();
         }
       };
+
+      img.src = currentSrc;
     }
 
     function createMarzipanoScene(wrapper, imgElement, realFileName, labelText) {
